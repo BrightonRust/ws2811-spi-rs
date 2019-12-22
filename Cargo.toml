@@ -1,18 +1,19 @@
 [package]
-name = "ws2812-spi"
-version = "0.2.0"
-authors = ["David Sawatzke <david-sawatzke@users.noreply.github.com>"]
+name = "ws2811-spi"
+version = "0.0.1"
+authors = ["David Sawatzke <david-sawatzke@users.noreply.github.com>", "Tim Small <tim@buttersideup.com>"]
 edition = "2018"
 categories = [
     "embedded",
     "no-std",
     "hardware-support"]
-keywords = ["smart-leds", "ws2812"]
-description = "SPI-based driver for ws2812 leds"
-documentation = "https://docs.rs/crate/ws2812-spi"
+keywords = ["smart-leds", "ws2811"]
+description = "SPI-based driver for ws2811 leds"
+#documentation = "https://docs.rs/crate/ws2812-spi"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/smart-leds-rs/ws2812-spi-rs"
+repository = "https://github.com/BrightonRust/ws2811-spi-rs.git"
+#repository = "https://github.com/smart-leds-rs/ws2812-spi-rs"
 
 [dependencies]
 nb = "0.1.1"
@@ -21,3 +22,4 @@ embedded-hal = "0.2.1"
 
 [features]
 mosi_idle_high = []
+rgb_order = []

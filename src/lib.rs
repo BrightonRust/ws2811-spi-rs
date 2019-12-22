@@ -1,12 +1,40 @@
-//! # Use ws2812 leds via spi
+//! # Use ws2811 leds via spi
+//!
+//! FIXME this is very preliminary for testing only FIXME
 //!
 //! - For usage with `smart-leds`
 //! - Implements the `SmartLedsWrite` trait
 //!
 //! Needs a type implementing the `spi::FullDuplex` trait.
 //!
-//! The spi peripheral should run at 3MHz
-
+//! References - Worldsemi WS2811 datasheet v1.4:
+//! http://www.world-semi.com/DownLoadFile/129
+//!
+//! This uses data output on the spi bus MOSI line to create a data stream
+//! which satisfies the timing requirements of the WS2811
+//!
+//! The WS2811 encodes a zero as:
+//! a high logic state for 220-380ns, followed by:
+//! a low logic state for 580-1000ns.
+//!
+//! The WS2811 encodes a one as:
+//! a high logic state for 580-1000ns, followed by:
+//! a low logic state for 580-1000ns.
+//!
+//! To satisfy these constraits, we select a 3MHz SPI bus speed, this results
+//! in:
+//! a single bit time of 333ns,
+//! a double bit time of 666ns, and
+//! a three bit time of 1000ns.
+//!
+//! Therefore we can encode each ws2811 bit as four spi bits,
+//! we can encode a zero as: b1000 (333 ns high, 1000ns low).
+//! we can encode a one as: b1100 (666 ns high, 666ns low).
+//!
+//! The spi peripheral should run at between 3MHz and 3.44MHz
+//! below 3MHz the low portion of the zero bit send goes over 1000ns,
+//! above 3.44MHz both portions of the one bit send go below 580ns,
+//!
 #![no_std]
 
 extern crate embedded_hal as hal;
@@ -29,11 +57,11 @@ pub const MODE: Mode = Mode {
     phase: Phase::CaptureOnFirstTransition,
 };
 
-pub struct Ws2812<SPI> {
+pub struct Ws2811<SPI> {
     spi: SPI,
 }
 
-impl<SPI, E> Ws2812<SPI>
+impl<SPI, E> Ws2811<SPI>
 where
     SPI: FullDuplex<u8, Error = E>,
 {
@@ -43,33 +71,32 @@ where
     ///
     /// Please ensure that the mcu is pretty fast, otherwise weird timing
     /// issues will occur
-    pub fn new(spi: SPI) -> Ws2812<SPI> {
+    pub fn new(spi: SPI) -> Ws2811<SPI> {
         Self { spi }
     }
 
-    /// Write a single byte for ws2812 devices
+    /// Write a single byte for ws2811 devices
     fn write_byte(&mut self, mut data: u8) -> Result<(), E> {
-        let mut serial_bits: u32 = 0;
-        for _ in 0..3 {
-            let bit = data & 0x80;
-            let pattern = if bit == 0x80 { 0b110 } else { 0b100 };
-            serial_bits = pattern | (serial_bits << 3);
+        let mut serial_bits: u16 = 0;
+        for _ in 0..=3 {
+            //let bit = data & 0b10000000;
+            let ws2811_nibble = if (data & 0b10000000) == 0b10000000 { 0b1100 } else { 0b1000 };
+            serial_bits = ws2811_nibble | (serial_bits << 4);
             data <<= 1;
         }
-        block!(self.spi.send((serial_bits >> 1) as u8))?;
-        // Split this up to have a bit more lenient timing
-        for _ in 3..8 {
-            let bit = data & 0x80;
-            let pattern = if bit == 0x80 { 0b110 } else { 0b100 };
-            serial_bits = pattern | (serial_bits << 3);
-            data <<= 1;
-        }
-        // Some implementations (stm32f0xx-hal) want a matching read
-        // We don't want to block so we just hope it's ok this way
+        block!(self.spi.send((serial_bits) as u8))?;
         self.spi.read().ok();
         block!(self.spi.send((serial_bits >> 8) as u8))?;
         self.spi.read().ok();
-        block!(self.spi.send(serial_bits as u8))?;
+        // Split this up to have a bit more lenient timing
+        for _ in 4..=7 {
+            let ws2811_nibble = if (data & 0b10000000) == 0b10000000 { 0b1100 } else { 0b1000 };
+            serial_bits = ws2811_nibble | (serial_bits << 4);
+            data <<= 1;
+        } 
+        block!(self.spi.send((serial_bits) as u8))?;
+        self.spi.read().ok();
+        block!(self.spi.send((serial_bits >> 8) as u8))?;
         self.spi.read().ok();
         Ok(())
     }
@@ -83,13 +110,13 @@ where
     }
 }
 
-impl<SPI, E> SmartLedsWrite for Ws2812<SPI>
+impl<SPI, E> SmartLedsWrite for Ws2811<SPI>
 where
     SPI: FullDuplex<u8, Error = E>,
 {
     type Error = E;
     type Color = RGB8;
-    /// Write all the items of an iterator to a ws2812 strip
+    /// Write all the items of an iterator to a ws2811 strip
     fn write<T, I>(&mut self, iterator: T) -> Result<(), E>
     where
         T: Iterator<Item = I>,
@@ -101,8 +128,8 @@ where
 
         for item in iterator {
             let item = item.into();
-            self.write_byte(item.g)?;
             self.write_byte(item.r)?;
+            self.write_byte(item.g)?;
             self.write_byte(item.b)?;
         }
         self.flush()?;

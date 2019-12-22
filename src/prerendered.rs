@@ -2,7 +2,9 @@
 //!
 //! This approach minimizes timing issues, at the cost of much higher ram usage.
 //! It also increases the needed time.
-
+//!
+//! FIXME   not yet implemented for ws2811!
+/*
 extern crate embedded_hal as hal;
 
 use hal::spi::FullDuplex;
@@ -165,3 +167,4 @@ impl Timing {
         })
     }
 }
+*/
